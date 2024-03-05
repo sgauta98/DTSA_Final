@@ -1,0 +1,138 @@
+---
+title: "Covid"
+output: pdf_document
+date: "2024-03-03"
+---
+
+#The purpose of this report is to analyze data used from the Johns Hopkins Covid-19 dataset provided in a github repository. This rmd file should be reproducible as the libraries used are noted at the top and the links to the data are from the github rather than my local PC. The aim was to analyze this data in any way we wanted, so I chose to analyze the data through looking at deaths and cases in both the US and globally as well as to compare these deaths and cases to see any patterns. 
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(scales)
+```
+
+```{r}
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+file_names <- c("time_series_covid19_confirmed_global.csv", "time_series_covid19_deaths_global.csv", "time_series_covid19_confirmed_US.csv", "time_series_covid19_deaths_US.csv")
+urls <- str_c(url_in, file_names)
+urls
+```
+
+```{r}
+global_cases <- read_csv(urls[1])
+global_deaths <- read_csv(urls[2])
+US_cases <- read_csv(urls[3])
+US_deaths <- read_csv(urls[4])
+```
+
+```{r}
+global_cases
+```
+
+
+```{r}
+global_cases <- global_cases %>%
+    pivot_longer(cols = -c('Province/State', 
+                           'Country/Region', Lat, Long), 
+                 names_to = "date", 
+                 values_to = "cases") %>%
+    select(-c(Lat, Long))
+global_cases
+```
+    
+```{r}
+global_deaths <- global_deaths %>%
+    pivot_longer(cols = -c('Province/State', 
+                           'Country/Region', Lat, Long), 
+                 names_to = "date", 
+                 values_to = "deaths") %>%
+    select(-c(Lat, Long))
+global_deaths
+```
+
+#Seen above are the pivot longer statements we included in class in order to tidy the data and view the dates as rows rather than columns 
+
+```{r}
+global <- global_cases %>%
+    full_join(global_deaths) %>%
+    rename(Country_Region = 'Country/Region', Province_State = 'Province/State') %>%
+    mutate(date = mdy(date))
+global
+```
+
+```{r}
+global <- global %>% filter(cases > 0)
+```
+
+```{r}
+US_cases <- US_cases %>%
+pivot_longer(cols = -(UID:Combined_Key), names_to = "date", values_to = "cases") %>%
+select(Admin2:cases) %>%
+mutate(date = mdy(date)) %>%
+select(-c(Lat, Long_))
+US_cases
+```
+
+```{r}
+US_deaths<-US_deaths %>%
+pivot_longer(cols=-(UID:Combined_Key),names_to="date",values_to="deaths")%>%
+select(Admin2:deaths) %>%
+mutate(date= mdy(date)) %>%
+select(-c(Lat,Long_))
+
+US <- US_cases %>%
+full_join(US_deaths)
+
+US
+```
+
+#Now that I have full joined the data for both deaths and cases for the US and global sets, visuals are ready to be created. 
+
+```{r}
+global_data_summary <- global %>%
+  group_by(date) %>%
+  summarize(total_cases = sum(cases, na.rm = TRUE),
+            total_deaths = sum(deaths, na.rm = TRUE),
+            region = "Global")
+
+us_data_summary <- US %>%
+  group_by(date) %>%
+  summarize(total_cases = sum(cases, na.rm = TRUE),
+            total_deaths = sum(deaths, na.rm = TRUE),
+            region = "US")
+
+combined_data <- bind_rows(global_data_summary, us_data_summary)
+
+ggplot(combined_data, aes(x = date, y = total_cases + total_deaths, fill = region)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = function(x) format(x / 1e6, scientific = FALSE, big.mark = ",")) +
+  labs(title = "Global vs. US COVID-19 Cases and Deaths Over Time",
+       x = "Date",
+       y = "Number of Cases/Deaths (in millions)",
+       fill = "Region") +
+  scale_fill_manual(values = c("Global" = "blue", "US" = "red")) +
+  theme_minimal()
+```
+
+#In this first visual, I combined the global and US data in order to create a plot to recognize the severity of the outbreak globally versus just in the US. 
+
+```{r}
+us_data_summary <- US %>%
+  group_by(Admin2) %>%
+  summarize(total_cases = sum(cases, na.rm = TRUE)) %>%
+  top_n(10, total_cases)  # Keep only the top 10 states
+
+ggplot(us_data_summary, aes(x = reorder(Admin2, total_cases), y = total_cases)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  scale_y_continuous(labels = function(x) format(x / 1e6, big.mark = ",")) +
+  labs(title = "Total COVID-19 Cases by Area in the US (Top 10)",
+       x = "State",
+       y = "Total Cases (in millions)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# This second plot shows which areas in the US were most affected by the virus. I originally wanted to display each area by cases, but ran into expected issues with overcrowded data. 
+
+
+#Regarding bias, one type of bias present in my analysis is data-processing bias. This is present because when cleaning the data to make it easier and more intuative to use, I removed certain data that will lead to a bias. Additionally, when the data was collected, there could very well have been reporting bias. Reporting bias would have came from certain issues that some states may have in terms of reporting their cases. Also, there are many people who do not have access to healthcare, so it is possible that these people were not in a hospital at the time of death and were not even reported to have covid, so their deaths were not counted in the report. Similarly, it is possible that some people had different conditions that caused death while they were simultaneously dealing with a covid infection. All of these reasons can lead to a bias in the dataset we worked with. 

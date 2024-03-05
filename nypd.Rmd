@@ -1,0 +1,119 @@
+---
+title: "MyfirstRMD"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-02-28"
+---
+
+```{r}
+r = getOption("repos")
+r["CRAN"] = "http://cran.us.r-project.org"
+options(repos = r)
+library(tidyverse)
+```
+
+
+
+
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_cases <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+nypd_cases
+```
+
+```{r}
+selected_data <- nypd_cases[, c("OCCUR_DATE", "BORO", "PERP_RACE", "VIC_RACE", "VIC_AGE_GROUP")]
+View(selected_data)
+selected_data <- nypd_cases[, c("OCCUR_DATE", "BORO", "PERP_RACE", "VIC_RACE", "VIC_AGE_GROUP", "VIC_SEX", "PERP_SEX")]
+```
+
+```{r}
+selected_data = selected_data %>%
+rename(DATE = OCCUR_DATE)
+selected_data = selected_data %>%
+rename(Location = BORO, Perp_race = PERP_RACE)
+selected_data = selected_data %>%
+rename(Date = DATE, Vic_race = VIC_RACE, Vic_age = VIC_AGE_GROUP, Vic_sex = VIC_SEX, Perp_sex = PERP_SEX)
+summary(selected_data)
+selected_data = na.omit(selected_data)
+```
+
+```{r}
+selected_data
+```
+
+```{r}
+selected_data$Date <- as.Date(selected_data$Date, format = "%m/%d/%Y")
+ 
+selected_data$Month <- format(selected_data$Date, "%m")
+
+ggplot(selected_data, aes(x = Month)) +
+     geom_bar() +
+     labs(title = "NYPD Shooting Incidents Per Month",
+          x = "Month",
+          y = "Number of Incidents") +
+     theme_minimal()
+```
+
+```{r}
+library(stringr)
+
+ggplot(selected_data, aes(x = str_sub(Vic_race, 1, 12))) +
+  geom_bar() +
+  labs(title = "Distribution of Victim Races",
+       x = "Victim Race",
+       y = "Count") +
+  theme_minimal()
+```
+#Here i only include the first 12 characters of the race in order to avoid overlap as some of the names are very long 
+
+```{r}
+df <- selected_data
+df$Perp_sex_binary <- ifelse(df$Perp_sex == "M", 1, 0)
+model <- glm(Perp_sex_binary ~ Perp_race, family = binomial(link = "logit"), data = df)
+
+summary(model)
+
+race_data <- data.frame(Perp_race = unique(df$Perp_race))
+
+
+race_data$predicted_prob <- predict(model, newdata = race_data, type = "response")
+
+
+ggplot(race_data, aes(x = Perp_race, y = predicted_prob)) +
+     geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+     labs(title = "Likelihood of Cop Shooter Being Male by Race",
+          x = "Perpetrator Race",
+          y = "Predicted Probability (Male)") +
+     theme_minimal() +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#In this analysis, we used logistic regression to model the likelihood of the sex of the cop shooter being male based on the victim's race. This is a binary classification as the sex of the cop was converted to binary values for the model. As seen in the model, the likelihood of the cop shooter being a male is almost 100% for all of the races except american indian and unknown.
+#Regarding bias in this data, I believe there is bias present starting from the data collection and extending to the data analysis itself. Regarding the data, it is possible that some incidents were omitted and only the reported and recorded incidents are present in the data. This leaves the possibility of bias present in the data that may skew some of the analysis I did. Additionally, in the data analysis portion, one of the first things I did was remove rows that had incomplete data (N/A). This is a form of selection bias and further affects the results from the analysis I performed. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
